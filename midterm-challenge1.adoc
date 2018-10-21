@@ -60,9 +60,9 @@ final work submission.
 Jerome created a CloudFormation template which can be used to deploy the DynaCorp
 application infrastructure on AWS. We haven't used CloudFormation much yet but we will
 work with it a lot in the second half of the semester. The infrastructure resources will be
-launched into the us-east-2 region. Before you launch the template, make sure you have setup an
+launched into the us-east-2 (Ohio) region. Before you launch the template, make sure you have setup an
 EC2 key pair in this region. Remember, your keys from the us-east-1 region will not work in
-any other region! It's easy to create a new set of keys using the EC2 web console.
+any other region! You can create a new set of keys using the EC2 web console.
 
 Jerome provided you with the following
 link you can click on to launch the CloudFormation template in the us-east-2 region:
@@ -73,18 +73,15 @@ The template will create a stack containing a number of AWS resources:
 
 * An AWS Virtual Private Cloud (VPC) including subnets, routing tables, routes, an Internet gateway, and security groups.
 
-* Two EC2 instances running the DynaCorp web application.
+* An ElastiCache node running the Redis caching engine.
 
-* An EC2 instance running a Redis database server.
-
-* An Application ELB distributing requests to the DynaCorp webservers.
+* An Application ELB for distributing requests to the DynaCorp webservers.
 
 After clicking on the launch link, click the *Next* link:
 
 On the stack *Specify Details* page, enter the following:
 
 1. In *Stack name*, the value should be `dynacorp`.
-2. In *Key Name*, select the name of your Amazon EC2 key pair.
 2. In *YourIp*, type in your current workstation public IP address in CIDR notation (use http://checkip.amazonaws.com to find it).
 
 Click the *Next* button.
@@ -95,21 +92,16 @@ On the *Review* page, review the settings and click the checkbox next to the
 statement *I acknowledge that AWS CloudFormation might create IAM resources.* Finally, click 
 the *Create* link.
 
-It will take a few minutes for CloudFormation to create the AWS resources for you. You can watch 
+It will take 5-10 minutes for CloudFormation to create the AWS resources for you. You can watch 
 the progress messages on the *Events* tab in the console. When the stack has been created, you 
 will see a CREATE_COMPLETE message in the *Status* column of the console and on the *Overview* 
 tab.
-
-The stack created all of the AWS resources described in the service architecture below. For 
-example, if you click on the EC2 dashboard you will find three new instances running.
 
 
 == Service architecture
 
 Jerome was kind enough to provide you with two architectural diagrams he created during
-an engineering planning session. The first diagram shows all the AWS resources he created for the new
-web application and how the resources were provisioned within the VPC. He thinks he created
-all of the necessary resources, but he's not sure.
+an engineering planning session. The first diagram shows how the resources should be configured. The CloudFormation template he provided  creates some of the resources described in the diagram.
 
 The second diagram shows all of the security groups, their relationships, and which incoming 
 services are allowed by the groups. Security is important to DynaCorp and Jermone spent a lot of time
@@ -122,26 +114,30 @@ image:DynaCorpSecurity.png["800","800"]
 
 == Troubleshoot the platform
 
-Jerome reported that the DynaCorp web service doesn't work, but he's not sure why. Accessing the 
-ELB endpoint via a web browser should bring up the website, but all it does is produce an error message. The 
-name of the web server responding to the request is located at the bottom of the error page. He 
-setup a special health check endpoint on each web server listening on port 80 (http) at the URL 
-path `/health`. This endpoint seems to be responding with an HTTP 200 message even though the web 
-application obviously isn't working.
+Jerome mentioned to you that the DynaCorp web service doesn't work after launching the CloudFormation template because it's missing the webservers (and maybe other things). He  recommended that you create the webservers before performing any troubleshooting. The webservers should have the following settings:
 
-He is able to access the web servers via ssh, and he can access the websites running on each web 
-server directly. The websites display an error message though -- something about not being able 
-to connect to a Redis database.
+* t2.micro type
+* ami-babc8adf AMI
+* Dynacorp-Webserver-Report IAM role
 
-Jerome setup a Redis database server on one of the EC2 instances (he decided not to use ElastiCache).
-The Redis database listens on TCP port 6379. Another thing he noticed was that when he accessed 
-the database server via ssh he couldn't access any Internet websites using curl (like `curl http://www.google.com`).
+You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value with the Redis service fully-qualified domain name endpoint and the `<server_name>` value with the name of the webserver instance:
 
-Help your friend troubleshoot and fix the DynaCorp web platform!
+  #!/bin/bash -xe
+  docker swarm init
+  docker service create \
+  --name webapp \
+  -p 80:8080 \
+  -e 'REDIS_HOST=<redis_endpoint>' \
+  -e 'SERVER_NAME=<server_name>' dynaweb:latest
 
-One more thing, Jerome made a point of asking you not to stop or terminate any of the EC2 
-instances he created. The instances are running Ubuntu Linux, and if you need to shell into any
-of them you should use the `ubuntu` user account.
+Once the webservers are running, you should begin to test the Dynacorp website. Jerome isn't sure why the site doesn't come up when he accesses the ELB endpoint. Jerome setup a special ELB health check endpoint on each web server listening on port 80 (http) at the URL path `/health`. 
+
+He is able to access the web servers via ssh, and he can access the websites running on each web server directly. The websites display an error message though -- something about not being able to connect to a Redis database. Jerome setup an ElastiCache node listening on the standard Redis port 6379, but for some reason the web applications are not able to access the Redis database. 
+
+Help your friend troubleshoot and fix the DynaCorp web platform! You may need to update or add resources to fix the platform. However, do not remove any resources created by the CloudFormation template.
+
+One more thing, Jerome mentioned that the EC2 instances are running Ubuntu Linux, and if you need to shell into any
+of them you should use the `ubuntu` user account instead of `ec2-user`.
 
 == Expand the platform
 
@@ -149,32 +145,28 @@ Your friend Jermome just called! DynaCorp would like to add another webserver to
 their product manager expects greater than anticipated demand for the new website. Add a third web server called
 `dynaweb3` located in a new availability zone (different than the other 2 AZs). Each web server should live in a 
 separate AZ. The new web server configuration should closely match the existing web servers (similar instance 
-type, AMI, role, etc). You do not need to match the existing tags.
+type, AMI, role, etc). Obviously the instance will have a different name tag.
 
-When launching the new web server, you will need to enter a small shell script in the EC2 instance user data 
-field:
+He asked you to expand the number of private networks and add a NAT gateway in the new AZ. Also, he would like you to add a private server to the new AZ called `dynafiles1` which is able to access the Internet. It should have the following settings:
 
-  #!/bin/bash -xe
-  docker swarm init
-  docker service create --name webapp -p 80:8080 -e 'REDIS_HOST=<dynadb1 private IP>' -e 'SERVER_NAME=dynaweb3' dynaweb:latest
+* t2.micro type
+* ami-babc8adf AMI
+* Dynacorp-Webserver-Report IAM role
+* New Security group called `dynacorp-Dynaprivate-apps` which allows:
+  ** Incoming access from the `dynacorp-DynaWebSecurityGroup` on ports 80 and 8080
 
-Note that `<dynadb1 private IP>` needs to be replaced by the private IP address of your dynadb1 instance in the above script.
-Also, this script only contains three lines and the second line may wrap on your screen because it is long.
-
-He asked asked you to expand the number of private networks and add a third NAT gateway. Jerome e-mailed you 
-the following diagram which shows the updated architecture he created for DynaCorp.
+Jerome e-mailed you the following diagrams which show the updated architecture he created for DynaCorp.
 
 image:DynaCorpExpanded.png["800","800"]
 
+image:DynaCorpSecurityExpanded.png["800","800"]
+
 == Run a shell script
 
-Once you have corrected the issues with the DynaCorp web application and have successfully tested the new webserver, run
-a shell script to document your work. Jerome needs this documentation to ensure you get paid for your labor.
+Once you have corrected the issues with the DynaCorp web application and have successfully tested the third webserver and private server, run a shell script to document your work. Jerome needs this documentation to ensure you get paid for your labor.
 
-Create a shell script called `aws-report.sh` located in the `~/report` directory on any one of the instances. The script
-should generate a set of JSON files containing the output of AWS CLI commands. These files contain information describing your
-AWS VPC. If you run this script and then change the configuration of a resource in the VPC, you will need to run this script
-again to capture the changes. Note, you will need to configure the AWS CLI before you run this script.
+Create a shell script called `aws-report.sh` in a directory located at `~/report` on any one of the instances. The script
+should generate a set of JSON files containing the output of AWS CLI commands. These files contain information describing your AWS VPC. If you run this script and then change the configuration of a resource in the VPC, you will need to run this script again to capture the changes. Note, you will need to configure the AWS CLI before you run this script.
 
 Here are the commands you should use in the shell script. Note, you should _not_ run these commands as the
 root user.
@@ -229,9 +221,7 @@ to receive any credit on this challenge.
 
 The last step in the challenge is to delete all the AWS resources you created so that you don't use up all your 
 free AWS credits. Before you can delete the CloudFormation stack you created at the beginning of the challenge, 
-you need to manually delete the AWS resources you created when you expanded the platform and added the web3 
-instance. If you try to delete the CloudFormation stack without manually deleting these resources the stack will 
-fail to delete properly (you will learn why this is the case in a few weeks).
+you need to manually delete the EC2 instances and NAT gateway you created. If you try to delete the CloudFormation stack without manually deleting these resources the stack will fail to delete properly (you will learn why this is the case in a few weeks).
 
 After deleting the new resources manually, go to the CloudFormation web
 console and select the DynaCorp stack. Click on the `Actions` button above and select the
