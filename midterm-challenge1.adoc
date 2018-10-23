@@ -114,13 +114,13 @@ image:DynaCorpSecurity.png["800","800"]
 
 == Troubleshoot the platform
 
-Jerome mentioned to you that the DynaCorp web service doesn't work after launching the CloudFormation template because it's missing the webservers (and maybe other things). He  recommended that you create the webservers before performing any troubleshooting. The webservers should have the following settings:
+Jerome mentioned to you that the DynaCorp web service doesn't work after launching the CloudFormation template because it's missing the webservers (and maybe other things). He recommended that you create the webservers before performing any troubleshooting. The webservers should have the following settings:
 
 * t2.micro type
 * ami-babc8adf AMI
 * Dynacorp-Service-Report IAM role
 
-You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value with the Redis service fully-qualified domain name endpoint and the `<server_name>` value with the name of the webserver instance:
+You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value with the Redis service fully-qualified domain name endpoint (this doesn't have a port number) and the `<server_name>` value with the name of the webserver instance:
 
   #!/bin/bash -xe
   docker swarm init
@@ -152,8 +152,8 @@ He asked you to expand the number of private networks and add a NAT gateway in t
 * t2.micro type
 * ami-babc8adf AMI
 * Dynacorp-Service-Report IAM role
-* New Security group called `dynacorp-Dynaprivate-apps` which allows:
-  ** Incoming access from the `dynacorp-DynaWebSecurityGroup` on ports 80 and 8080
+* New Security group called `dynacorp-DynaPrivateApps` which allows:
+  ** Incoming access from the `dynacorp-DynaWebSecurityGroup` on ports 22, 80, and 8080
 
 Jerome e-mailed you the following diagrams which show the updated architecture he created for DynaCorp.
 
@@ -169,7 +169,7 @@ Create a shell script called `aws-report.sh` in a directory located at `~/report
 should generate a set of JSON files containing the output of AWS CLI commands. These files contain information describing your AWS VPC. If you run this script and then change the configuration of a resource in the VPC, you will need to run this script again to capture the changes. 
 
 Here are the commands you should use in the shell script. Note, you should _not_ run these commands as the
-root user.
+root user. Additionally, you do not need to run the aws config command or provide any access credentials before running this script because an instance role should be configured on the EC2 instance.
 
   REGION=us-east-2
   aws elbv2 describe-load-balancers  --region $REGION > elbs.json
