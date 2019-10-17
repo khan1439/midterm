@@ -3,19 +3,13 @@
 = SEIS 665 Midterm Challenge: DynaCorp
 :icons: font
 Jason Baker <bake2352@stthomas.edu>
-1.2, 03/13/2018
+1.3, 10/20/2019
 
 :sectnums!:
 
 == Overview
 
-Your good friend Jerome works at DynaCorp Industries and he is responsible for deploying a
-new web application on AWS. He created a number of AWS infrastructure resources to support the 
-new web application (written in Node.js), but the web service
-doesn't seem to be working. He texted you because he knows you have some experience
-working with cloud computing and you might be able to help. He thinks that some of the AWS
-resources aren't configured correctly and that some resources may be missing. Help Jerome figure
-out how to get DynaCorp's web application working properly.
+Your good friend Jerome works at DynaCorp Industries as an enterprise architect and he is responsible for deploying a new web application on AWS. He created a couple AWS infrastructure diagrams to decribe the resources necessary to support the web application (written in Node.js). He texted you because he knows you have some experience working with AWS and you might be able to help him setup the application environment. Help Jerome figure out how to get DynaCorp's web application deployed.
 
 [IMPORTANT]
 ====
@@ -33,12 +27,6 @@ You should not have any EC2 instances, ELBs, NAT gateways or Target Groups confi
 before working on this challenge. Delete these resources immediately before proceeding. 
 ====
 
-[IMPORTANT]
-====
-If you are able to get the DynaCorp website running, that does not necessarily mean 
-that all the resources in the desired architecture are configured properly! 
-====
-
 [NOTE]
 ====
 Do not print this document, it is disruptive to the rest of the students participating in the 
@@ -49,72 +37,48 @@ omissions.
 [NOTE]
 ====
 You must submit your work in a Github repository to receive credit for this challenge. E-mail 
-messages, screenshots,
-and verbal explanations will not be accepted or graded. Please budget time to complete your 
-final work submission. 
+messages, screenshots, and verbal explanations will not be accepted or graded. Please budget time to complete your final work submission. 
 ====
 
 :sectnums:
-==  Launch the application stack
-
-Jerome created a CloudFormation template which can be used to deploy the DynaCorp
-application infrastructure on AWS. We haven't used CloudFormation much yet but we will
-work with it a lot in the second half of the semester. The infrastructure resources will be
-launched into the us-east-2 (Ohio) region. Before you launch the template, make sure you have setup an
-EC2 key pair in this region. Remember, your keys from the us-east-1 region will not work in
-any other region! You can create a new set of keys using the EC2 web console.
-
-Jerome provided you with the following
-link you can click on to launch the CloudFormation template in the us-east-2 region:
-
-https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/new?stackName=dynacorp&templateURL=https://s3.amazonaws.com/seis665/dynacorp-cf-broken.json[Launch stack]
-
-The template will create a stack containing a number of AWS resources:
-
-* An AWS Virtual Private Cloud (VPC) including subnets, routing tables, routes, an Internet gateway, and security groups.
-
-* An ElastiCache node running the Redis caching engine.
-
-* An Application ELB for distributing requests to the DynaCorp webservers.
-
-After clicking on the launch link, click the *Next* link:
-
-On the stack *Specify Details* page, enter the following:
-
-1. In *Stack name*, the value should be `dynacorp`.
-2. In *YourIp*, type in your current workstation public IP address in CIDR notation (use http://checkip.amazonaws.com to find it).
-
-Click the *Next* button.
-
-On the *Options* page just click *Next*.
-
-On the *Review* page, review the settings and click the checkbox next to the
-statement *I acknowledge that AWS CloudFormation might create IAM resources.* Finally, click 
-the *Create* link.
-
-It will take 5-10 minutes for CloudFormation to create the AWS resources for you. You can watch 
-the progress messages on the *Events* tab in the console. When the stack has been created, you 
-will see a CREATE_COMPLETE message in the *Status* column of the console and on the *Overview* 
-tab.
-
-
 == Service architecture
 
 Jerome was kind enough to provide you with two architectural diagrams he created during
-an engineering planning session. The first diagram shows how the resources should be configured. The CloudFormation template he provided  creates some of the resources described in the diagram.
+an engineering planning session. The first diagram shows how the resources should be configured.
 
-The second diagram shows all of the security groups, their relationships, and which incoming 
-services are allowed by the groups. Security is important to DynaCorp and Jermone spent a lot of time
-creating a robust security architecture.
+DynaCorp's new web application environment consists of a VPC (`dynacorp-vpc`) located in us-east-2 using a 10.50.0.0/20 CIDR block. The VPC is partitioned into 3 public subnets and 3 private subnets located in separate AZs. The three public subnets are:
 
-image:DynaCorpWeb.png["800","800"]
+  * dynacorp-public-1 (10.50.1.0/24)
+  * dynacorp-public-2 (10.50.2.0/24)
+  * dynacorp-public-3 (10.50.3.0/24)
 
-image:DynaCorpSecurity.png["800","800"]
+The three private subnets are:
+
+  * dynacorp-private-1 (10.50.11.0/24)
+  * dynacorp-private-2 (10.50.12.0/24)
+  * dynacorp-private-3 (10.50.13.0/24)
+
+Each AZ has a NAT gatway with the appropriate routing configuration in place.
+
+The DynaCorp web application consists of a Node.js application running on mutiple webservers in an auto-scaling group. Website requests are distributed to the webservers using an application load balancer. The web application persists data on a Redis database cluster.
+
+DynaCorp would like to run a special analytics application on a private EC2 instance (`dynalytics1`) which retrieves data from Redis.
+
+image:DynaCorp-Web.png["800","800"]
+
+The second diagram shows all of the security groups, their relationships, and the ingress security rules. Security is important to DynaCorp and Jermone spent a lot of time creating a robust security architecture.
 
 
-== Troubleshoot the platform
+Internet users are able to access the application load balancer (`dynalb-sg`) using HTTP on port 80. The application load balancer is able to access the webservers (`dynaweb-sg`) using HTTP on port 80. The webservers are able to access the Redis cluster (`dynaredis-sg`) using TCP on port 6379. 
 
-Jerome mentioned to you that the DynaCorp web service doesn't work after launching the CloudFormation template because it's missing the webservers (and maybe other things). He recommended that you create the webservers before performing any troubleshooting. The webservers should have the following settings:
+The platform administrator (your workstation IP) is able to use SSH to access the webservers. The webservers are able to access the `dynalytics1` isntance (`dynalytics-sg`) using SSH. Finally, the dynalytics1 instance is able to access the Redis database cluster using TCP on port 6379.
+
+image:DynaCorp-Full-Security-Architecture.png["800","800"]
+
+
+== Deploying the web application
+
+The DynaCorp webservers should have the following settings:
 
 * t2.micro type
 * ami-babc8adf AMI
