@@ -1,0 +1,50 @@
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-east-2",
+      "source_ami_filter": {
+        "filters": {
+          "virtualization-type": "hvm",
+          "name": "*ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*",
+          "root-device-type": "ebs"
+        },
+        "owners": ["099720109477"],
+        "most_recent": true
+      },
+      "instance_type": "t2.small",
+      "ssh_username": "ubuntu",
+      "ami_name": "DYNACORP-NODE-{{ timestamp }}",
+      "ami_groups": ["all"]
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo apt-get update -y",
+        "sudo apt-get install software-properties-common -y",
+        "echo 'Installing Ansible software'",
+        "sudo apt-add-repository ppa:ansible/ansible",
+        "sudo apt-get update -y",
+        "sudo apt-get install ansible -y",
+        "mkdir /home/ubuntu/web-app"
+      ]
+    },
+    {
+      "type": "file",
+      "source": "ansible-files/",
+      "destination": "/tmp"
+    },
+    {
+      "type": "file",
+      "source": "docker-files/",
+      "destination": "/home/ubuntu/web-app"
+    },
+    {
+      "type": "ansible-local",
+      "playbook_file": "ansible.yml",
+      "galaxy_file": "requirements.yml"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "builds": [
+    {
+      "name": "amazon-ebs",
+      "builder_type": "amazon-ebs",
+      "build_time": 1567046121,
+      "files": null,
+      "artifact_id": "us-east-1:ami-09a959de3eefe1112",
+      "packer_run_uuid": "9cf3fc36-1556-16a1-bb71-e558535bc7c3",
+      "custom_data": null
+    },
+    {
+      "name": "amazon-ebs",
+      "builder_type": "amazon-ebs",
+      "build_time": 1567303838,
+      "files": null,
+      "artifact_id": "us-east-1:ami-0b1c52136faa2e4c9",
+      "packer_run_uuid": "4cb9fdd0-8e99-c96b-8b26-c45e79ccb9a4",
+      "custom_data": null
+    },
+    {
+      "name": "amazon-ebs",
+      "builder_type": "amazon-ebs",
+      "build_time": 1570990112,
+      "files": null,
+      "artifact_id": "us-east-1:ami-0414e79e87fbc38af",
+      "packer_run_uuid": "6835f0b2-1e0c-7244-daee-c0d17e95ca18",
+      "custom_data": null
+    }
+  ],
+  "last_run_uuid": "6835f0b2-1e0c-7244-daee-c0d17e95ca18"
+}

@@ -9,7 +9,7 @@ Jason Baker <bake2352@stthomas.edu>
 
 == Overview
 
-Your good friend Jerome works at DynaCorp Industries as an enterprise architect and he is responsible for deploying a new web application on AWS. He created a couple AWS infrastructure diagrams to decribe the resources necessary to support the web application (written in Node.js). He texted you because he knows you have some experience working with AWS and you might be able to help him setup the application environment. Help Jerome figure out how to get DynaCorp's web application deployed.
+Your good friend Jerome works at DynaCorp Industries as an enterprise architect and he is responsible for deploying a new web application on AWS. He created a couple AWS infrastructure diagrams to decribe the resources necessary to support the web application. He texted you because he knows you have some experience working with AWS and you might be able to help him setup the application environment. Help Jerome figure out how to get DynaCorp's web application deployed.
 
 [IMPORTANT]
 ====
@@ -23,7 +23,7 @@ that you log out, close, or terminate any communications applications running on
 
 [IMPORTANT]
 ====
-You should not have any EC2 instances, ELBs, NAT gateways or Target Groups configured in us-east-2 
+You should not have any EC2 instances, ELBs, NAT gateways or Target Groups configured in us-east-2 (Ohio) 
 before working on this challenge. Delete these resources immediately before proceeding. 
 ====
 
@@ -46,7 +46,7 @@ messages, screenshots, and verbal explanations will not be accepted or graded. P
 Jerome was kind enough to provide you with two architectural diagrams he created during
 an engineering planning session. The first diagram shows how the resources should be configured.
 
-DynaCorp's new web application environment consists of a VPC (`dynacorp-vpc`) located in us-east-2 using a 10.50.0.0/20 CIDR block. The VPC is partitioned into 3 public subnets and 3 private subnets located in separate AZs. The three public subnets are:
+DynaCorp's new web application environment consists of a VPC (`dynacorp-vpc`) located in us-east-2 (Ohio) using a 10.50.0.0/20 CIDR block. The VPC is partitioned into 3 public subnets and 3 private subnets located in separate AZs. The three public subnets are:
 
   * dynacorp-public-1 (10.50.1.0/24)
   * dynacorp-public-2 (10.50.2.0/24)
@@ -71,106 +71,116 @@ The second diagram shows all of the security groups, their relationships, and th
 
 Internet users are able to access the application load balancer (`dynalb-sg`) using HTTP on port 80. The application load balancer is able to access the webservers (`dynaweb-sg`) using HTTP on port 80. The webservers are able to access the Redis cluster (`dynaredis-sg`) using TCP on port 6379. 
 
-The platform administrator (your workstation IP) is able to use SSH to access the webservers. The webservers are able to access the `dynalytics1` isntance (`dynalytics-sg`) using SSH. Finally, the dynalytics1 instance is able to access the Redis database cluster using TCP on port 6379.
+The platform administrator (your workstation IP) is able to use SSH to access the webservers. The webservers are able to access the `dynalytics1` instance (`dynalytics-sg`) using SSH. Finally, the dynalytics1 instance is able to access the Redis database cluster using TCP on port 6379.
 
 image:DynaCorp-Full-Security-Architecture.png["800","800"]
 
 
 == Deploying the web application
 
-The DynaCorp webservers should have the following settings:
+The DynaCorp web application consists of a Node.js application which persists data in a Redis database. Start by creating a Redis database cluster containing 2 nodes in separate AZs running Redis v5.0.5 on cache.t2.micro instances.  These cluster nodes are associated with the `dynaredis-sg` security group.
+
+The web application is hosted on 3 EC2 instances which are part of an auto-scaling group (`dynacorp-asg`). The instances are associated with the `dynaweb-sg` security group. Each instance has the following properties:
 
 * t2.micro type
-* ami-babc8adf AMI
-* Dynacorp-Service-Report IAM role
+* ami-046fad5d3dc51acb2 AMI
+* public IP address enabled
 
-You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value with the Redis service fully-qualified domain name endpoint (this doesn't have a port number) and the `<server_name>` value with the name of the webserver instance:
+You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value in the script code with the Redis fully-qualified domain name endpoint (*this address shouldn't include a port number*):
 
   #!/bin/bash -xe
-  docker swarm init
+  HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/local-hostname)
   docker service create \
   --name webapp \
   -p 80:8080 \
   -e 'REDIS_HOST=<redis_endpoint>' \
-  -e 'SERVER_NAME=<server_name>' dynaweb:latest
+  -e "SERVER_NAME=$HOSTNAME" dynaweb:latest
 
-Once the webservers are running, you should begin to test the Dynacorp website. Jerome isn't sure why the site doesn't come up when he accesses the ELB endpoint on port 80. Jerome setup a special ELB health check endpoint on each web server listening on port 80 (http) at the URL path `/health`. 
+Create an application load balancer to distribute requests to the webservers. The load balancer should use the `/health` endpoint address for health checks.
 
-He is able to access the web servers via ssh, and he can access the websites running on each web server directly. The websites display an error message though -- something about not being able to connect to a Redis database. Jerome setup an ElastiCache node listening on the standard Redis port 6379, but for some reason the web applications are not able to access the Redis database. 
+The EC2 instances are running Ubuntu Linux, and if you need to shell into any
+of them you should use the `ubuntu` user account instead of `ec2-user`. Note, you should not need to install, update, or restart any services on the webservers if the servers were properly launched. If you haven't created any EC2 instances in the us-east-2 region before, you will need to create a new EC2 keypair since keypairs are region specific.
 
-Help your friend troubleshoot and fix the DynaCorp web platform! You may need to update or add resources to fix the platform. However, do not remove any resources created by the CloudFormation template.
+How will you know if the web application is working properly? You should be able to test the access to it from a web browser on your workstation. If you see an error message, that means something is likely misconfigured. If you see a lovely webpage with a page hit counter on it, congratulations you got it working! Refresh the webpage a number of times until the page counter displays at least 10 views. 
 
-One more thing, Jerome mentioned that the EC2 instances are running Ubuntu Linux, and if you need to shell into any
-of them you should use the `ubuntu` user account instead of `ec2-user`.
+Make sure that all of your webservers are responding to website requests. You can view which webserver is handling the request by looking at the bottom of the web page.
 
-== Expand the platform
+== Capture some data
 
-Your friend Jermome just called! DynaCorp would like to add another webserver to the server cluster because
-their product manager expects greater than anticipated demand for the new website. Add a third web server called
-`dynaweb3` located in a new availability zone (different than the other 2 AZs). Each web server should live in a 
-separate AZ. The new web server configuration should closely match the existing web servers (similar instance 
-type, AMI, role, etc). Obviously the instance will have a different name tag.
+Jerome would like you to collect some data from a server in the new web platform. Launch a new EC2 instance called `dynalytics1` in the private subnet of the third AZ. This instance is associated with the `dynalytics-sg` security group. 
 
-He asked you to expand the number of private networks and add a NAT gateway in the new AZ. Also, he would like you to add a private server to the new AZ called `dynafiles1` which is able to access the Internet. It should have the following settings:
+Create an instance IAM Role called `EC2ReadOnly` with the AmazonEC2ReadOnlyAccess policy attached to it. Alternatively you could install a set of user API keys on the server if you cannot figure out how to setup the proper instance role, however this will result in a score reduction.
+
+The instance has the following properties:
 
 * t2.micro type
-* ami-babc8adf AMI
-* Dynacorp-Service-Report IAM role
-* New Security group called `dynacorp-DynaPrivateApps` which allows:
-  ** Incoming access from the `dynacorp-DynaWebSecurityGroup` on ports 22, 80, and 8080
+* ami-046fad5d3dc51acb2 AMI
+* public IP address disabled
+* IAM role: EC2ReadOnly
 
-Jerome e-mailed you the following diagrams which show the updated architecture he created for DynaCorp.
+After logging into the server, run the following command:
 
-image:DynaCorpExpanded.png["800","800"]
+  aws ec2 describe-instances --instance-ids $(curl http://169.254.169.254/latest/meta-data/instance-id) --region us-east-2 > analytics.json
 
-image:DynaCorpSecurityExpanded.png["800","800"]
+The command will create an output file called `analytics.json`. You will need to provide this file at the end of the challenge so don't delete this instance.
+
+Note, you can skip this part of the challenge completely but it will cost you some points.
 
 == Run a shell script
 
-Once you have corrected the issues with the DynaCorp web application and have successfully tested the third webserver and private server, run a shell script to document your work. Jerome needs this documentation to ensure you get paid for your labor.
+Log into one of the webservers and run a shell script to document your work on this challenge. 
 
-Create a shell script called `aws-report.sh` in a directory located at `~/report` on any one of the instances. The script
+Create a shell script called `aws-report.sh` in a directory located at `~/report` on any one of the dynaweb instances. The script
 should generate a set of JSON files containing the output of AWS CLI commands. These files contain information describing your AWS VPC. If you run this script and then change the configuration of a resource in the VPC, you will need to run this script again to capture the changes. 
 
 Here are the commands you should use in the shell script. Note, you should _not_ run these commands as the
-root user. Additionally, you do not need to run the aws config command or provide any access credentials before running this script because an instance role should be configured on the EC2 instance.
+root user. Additionally, the instance needs to have AWS API credentials in order to run the commands in the script. You can either replace the IAM role on the EC2 instance with the role you created in the previous section (`EC2ReadOnly`) or you can run the `aws configure` command and provide a set of API access keys.  
+
+Here are the commands which you should place in the shell script:
 
   REGION=us-east-2
-  aws elbv2 describe-load-balancers  --region $REGION > elbs.json
-  ELBARN=$(aws elbv2 describe-load-balancers  --region $REGION | jq -r '.LoadBalancers[0] .LoadBalancerArn')
-  aws ec2 describe-instances  --region $REGION > instances.json
-  aws elbv2 describe-listeners --load-balancer-arn $ELBARN  --region $REGION > listeners.json
-  aws ec2 describe-nat-gateways  --region $REGION > nats.json
-  aws ec2 describe-route-tables  --region $REGION > routes.json
-  aws ec2 describe-subnets  --region $REGION > subnets.json
-  aws elbv2 describe-target-groups  --region $REGION > targetgroups.json
-  TGARN=$(aws elbv2 describe-target-groups  --region $REGION | jq -r '.TargetGroups[0] .TargetGroupArn')
-  aws elbv2 describe-target-health --target-group-arn $TGARN  --region $REGION > targethealth.json
-  aws ec2 describe-security-groups  --region $REGION > security-groups.json
-  aws ec2 describe-vpcs  --region $REGION > vpcs.json
+  aws autoscaling describe-auto-scaling-groups --region $REGION > autoscaling.json
+  aws elbv2 describe-load-balancers --region $REGION > elbs.json
+  ELBARN=$(aws elbv2 describe-load-balancers --region $REGION | jq -r '.LoadBalancers[0] .LoadBalancerArn')
+  aws ec2 describe-instances --region $REGION > instances.json
+  aws autoscaling describe-launch-configurations --region $REGION > launch-configurations.json
+  aws elbv2 describe-listeners --load-balancer-arn $ELBARN --region $REGION > listeners.json
+  aws ec2 describe-nat-gateways --region $REGION > nats.json
+  aws ec2 describe-route-tables --region $REGION > routes.json
+  aws ec2 describe-subnets --region $REGION > subnets.json
+  aws elbv2 describe-target-groups --region $REGION > targetgroups.json
+  TGARN=$(aws elbv2 describe-target-groups --region $REGION | jq -r '.TargetGroups[0] .TargetGroupArn')
+  aws elbv2 describe-target-health --target-group-arn $TGARN --region $REGION > targethealth.json
+  aws ec2 describe-security-groups --region $REGION > security-groups.json
+  aws ec2 describe-vpcs --region $REGION > vpcs.json
+  curl -s $(cat elbs.json | jq -r .[][0].DNSName) > response.html
 
 
 === Check your work
 Here is what the contents of your git repository should look like before final submission:
 
 ====
+&#x2523; analytics.json +
+&#x2523; autoscaling.json +
 &#x2523; aws-report.sh +
 &#x2523; elbs.json +
 &#x2523; instances.json +
+&#x2523; launch-configurations.json +
 &#x2523; listeners.json +
 &#x2523; nats.json +
 &#x2523; routes.json +
 &#x2523; subnets.json +
 &#x2523; targetgroups.json +
 &#x2523; targethealth.json +
+&#x2523; response.html +
 &#x2523; security-groups.json +
 &#x2517; vpcs.json +
 ====
 
 === Submit your work
 
-Check each of the files to make sure the files contain data and the filesnames are correct. Add all of the
-files to a local Git repository and commit your work.
+Check each of the files to *make sure the files contain data* and the filenames are correct. Add all of the
+files to a local Git repository and commit your work. Note, if you skipped the _Capture some data_ section your repository will not have an `analytics.json` file.
 
 Finally, create a new GitHub Classroom repository by clicking on this link:
 
@@ -181,18 +191,10 @@ up to GitHub. Verify that your files are properly stored on GitHub. Remember, yo
 GitHub
 to receive any credit on this challenge.
 
-=== Terminate stack
+=== Delete all AWS resources
 
 The last step in the challenge is to delete all the AWS resources you created so that you don't use up all your 
-free AWS credits. Before you can delete the CloudFormation stack you created at the beginning of the challenge, 
-you need to manually delete the EC2 instances and NAT gateway you created. If you try to delete the CloudFormation stack without manually deleting these resources the stack will fail to delete properly (you will learn why this is the case in a few weeks).
-
-After deleting the new resources manually, go to the CloudFormation web
-console and select the DynaCorp stack. Click on the `Actions` button above and select the
-`Delete Stack` action from the drop-down menu. Remember, you will
-get billed for each hour these services are running (or at least lose free
-credits). Note, because you manually made changes to the resource in this stack it may not delete properly
-the first time. If you encounter a deletion error simply select the stack again and retry the delete action.
+free AWS credits. 
 
 == Submitting your work
 You must submit your work via GitHub. I will not accept an email, pictures, or printed materials.  
