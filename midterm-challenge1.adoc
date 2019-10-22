@@ -78,7 +78,7 @@ image:DynaCorp-Full-Security-Architecture.png["800","800"]
 
 == Deploying the web application
 
-The DynaCorp web application consists of a Node.js application which persists data in a Redis database. Start by creating a Redis database cluster containing 2 nodes in separate AZs running Redis v5.0.5 on cache.t2.micro instances.  These cluster nodes are associated with the `dynaredis-sg` security group.
+The DynaCorp web application consists of a Node.js application which persists data in a Redis database. Start by creating a Redis database cluster containing 2 nodes (1 shard) in separate AZs running Redis v5.0.5 on cache.t2.micro instances.  These cluster nodes are associated with the `dynaredis-sg` security group.
 
 The web application is hosted on 3 EC2 instances which are part of an auto-scaling group (`dynacorp-asg`). The instances are associated with the `dynaweb-sg` security group. Each instance has the following properties:
 
