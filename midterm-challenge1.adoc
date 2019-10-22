@@ -86,7 +86,7 @@ The web application is hosted on 3 EC2 instances which are part of an auto-scali
 * ami-046fad5d3dc51acb2 AMI
 * public IP address enabled
 
-You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value in the script code with the Redis fully-qualified domain name endpoint (*this address shouldn't include a port number*):
+You will need to enter a small shell script in the EC2 instance user data when launching the webservers, replacing the `<redis_endpoint>` value in the script code with the Redis fully-qualified domain name endpoint (*this address shouldn't include a port number and is usually called a Configuration Endpoint*):
 
   #!/bin/bash -xe
   HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/local-hostname)
